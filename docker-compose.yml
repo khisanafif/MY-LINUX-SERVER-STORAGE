@@ -1,0 +1,27 @@
+services:
+  linux-cloud-storage:
+    image: node:22-alpine
+    container_name: linux-cloud-storage
+    working_dir: /app
+    environment:
+      - UV_THREADPOOL_SIZE=2
+    volumes:
+      - ./:/app
+    ports:
+      - "8080:8080"
+    command: node --max-old-space-size=48 --max-semi-space-size=1 --jitless --expose-gc server.js
+    mem_limit: 64m
+    restart: unless-stopped
+
+  cloudflared-tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared-tunnel
+    depends_on:
+      - linux-cloud-storage
+    environment:
+      - GOGC=50
+    volumes:
+      - ./:/app
+    command: tunnel --no-autoupdate --ha-connections 1 --url http://linux-cloud-storage:8080 --logfile /app/cloudflared.log
+    mem_limit: 64m
+    restart: unless-stopped

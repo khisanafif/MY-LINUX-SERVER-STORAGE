@@ -1,0 +1,1424 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Linux Cloud Drive - Penyimpanan Cloud Ringan (LAN & Publik)</title>
+  <style>
+    :root {
+      --bg: #0b1120;
+      --sidebar: #111827;
+      --card: #1e293b;
+      --card-hover: #26354d;
+      --border: #334155;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --accent-hover: #0284c7;
+      --success: #22c55e;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --purple: #a855f7;
+      --pink: #ec4899;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    /* Top Header */
+    .topbar {
+      background: var(--sidebar);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 20px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .brand-icon {
+      font-size: 1.8rem;
+      background: linear-gradient(135deg, #38bdf8, #6366f1);
+      width: 42px;
+      height: 42px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .brand h1 {
+      font-size: 1.2rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .badge-online {
+      background: rgba(34, 197, 94, 0.15);
+      color: var(--success);
+      border: 1px solid var(--success);
+      font-size: 0.7rem;
+      padding: 2px 8px;
+      border-radius: 999px;
+    }
+    .search-box {
+      flex: 1;
+      max-width: 460px;
+      display: flex;
+      align-items: center;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 6px 12px;
+      gap: 8px;
+    }
+    .search-box input {
+      background: transparent;
+      border: none;
+      color: var(--text);
+      width: 100%;
+      font-size: 0.92rem;
+      outline: none;
+    }
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    /* Layout */
+    .layout {
+      display: flex;
+      flex: 1;
+      min-height: calc(100vh - 67px);
+    }
+    .sidebar {
+      width: 270px;
+      background: var(--sidebar);
+      border-right: 1px solid var(--border);
+      padding: 18px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      flex-shrink: 0;
+    }
+    .main {
+      flex: 1;
+      padding: 20px;
+      overflow-y: auto;
+      max-width: 100%;
+    }
+    @media (max-width: 860px) {
+      .layout {
+        flex-direction: column;
+      }
+      .sidebar {
+        width: 100%;
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+      }
+    }
+    /* Buttons */
+    button, .btn {
+      background: var(--accent);
+      color: #0b1120;
+      border: none;
+      border-radius: 8px;
+      padding: 8px 14px;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 0.85rem;
+      transition: 0.15s;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      text-decoration: none;
+    }
+    button:hover, .btn:hover {
+      background: var(--accent-hover);
+      color: #fff;
+    }
+    .btn-outline {
+      background: var(--card);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn-outline:hover {
+      background: var(--card-hover);
+      border-color: var(--accent);
+    }
+    .btn-danger {
+      background: rgba(239, 68, 68, 0.15);
+      color: #fca5a5;
+      border: 1px solid rgba(239, 68, 68, 0.5);
+    }
+    .btn-danger:hover {
+      background: var(--danger);
+      color: #fff;
+    }
+    .btn-sm {
+      padding: 5px 10px;
+      font-size: 0.78rem;
+      border-radius: 6px;
+    }
+    /* Sidebar Quick Actions & Menu */
+    .quick-create {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .btn-upload-main {
+      grid-column: span 2;
+      padding: 11px;
+      font-size: 0.92rem;
+      background: linear-gradient(135deg, #38bdf8, #3b82f6);
+      color: #fff;
+    }
+    .nav-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .nav-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 9px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 0.9rem;
+      font-weight: 500;
+      transition: 0.15s;
+    }
+    .nav-item:hover {
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text);
+    }
+    .nav-item.active {
+      background: rgba(56, 189, 248, 0.15);
+      color: var(--accent);
+      font-weight: 600;
+    }
+    .nav-count {
+      background: var(--card);
+      color: var(--muted);
+      font-size: 0.74rem;
+      padding: 2px 7px;
+      border-radius: 999px;
+    }
+    /* Storage Box */
+    .storage-box {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px;
+      margin-top: auto;
+    }
+    .storage-title {
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+    }
+    .meter-bar {
+      height: 8px;
+      background: var(--bg);
+      border-radius: 999px;
+      overflow: hidden;
+      display: flex;
+      margin-bottom: 8px;
+    }
+    .meter-seg {
+      height: 100%;
+    }
+    .storage-legend {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px;
+      font-size: 0.74rem;
+      color: var(--muted);
+      margin-top: 8px;
+    }
+    .dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-right: 4px;
+    }
+    /* Quick Network Banner */
+    .net-banner {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 14px;
+      margin-bottom: 16px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: 0.85rem;
+    }
+    .net-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+    .net-pill {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      padding: 4px 10px;
+      border-radius: 6px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-family: Consolas, monospace;
+      font-size: 0.82rem;
+    }
+    /* Breadcrumb & Controls Bar */
+    .drive-header {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .breadcrumbs {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.95rem;
+    }
+    .crumb {
+      padding: 5px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      background: var(--card);
+      border: 1px solid var(--border);
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .crumb:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    .crumb-sep {
+      color: var(--muted);
+    }
+    .view-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    select {
+      background: var(--card);
+      color: var(--text);
+      border: 1px solid var(--border);
+      padding: 7px 10px;
+      border-radius: 8px;
+      font-size: 0.84rem;
+      outline: none;
+    }
+    /* Dropzone */
+    .drop-banner {
+      border: 2px dashed var(--border);
+      background: rgba(30, 41, 59, 0.5);
+      border-radius: 10px;
+      padding: 14px;
+      text-align: center;
+      margin-bottom: 18px;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+    .drop-banner:hover, .drop-banner.dragover {
+      border-color: var(--accent);
+      background: rgba(56, 189, 248, 0.08);
+    }
+    .progress-wrap {
+      margin-top: 8px;
+      display: none;
+    }
+    .progress-bar {
+      height: 7px;
+      background: var(--bg);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      width: 0%;
+      background: var(--success);
+      transition: width 0.15s;
+    }
+    /* Section Headings */
+    .sec-title {
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      margin: 16px 0 10px;
+      font-weight: 700;
+    }
+    /* Folders Grid */
+    .folder-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .folder-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      cursor: pointer;
+      transition: 0.15s;
+    }
+    .folder-card:hover {
+      background: var(--card-hover);
+      border-color: var(--accent);
+      transform: translateY(-1px);
+    }
+    .folder-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      overflow: hidden;
+    }
+    .folder-icon {
+      font-size: 1.6rem;
+      flex-shrink: 0;
+    }
+    .folder-name {
+      font-weight: 600;
+      font-size: 0.92rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .folder-meta {
+      font-size: 0.74rem;
+      color: var(--muted);
+    }
+    .folder-actions {
+      display: flex;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+    /* Files Grid */
+    .file-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(215px, 1fr));
+      gap: 14px;
+    }
+    .file-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      transition: 0.15s;
+    }
+    .file-card:hover {
+      border-color: var(--accent);
+      transform: translateY(-2px);
+    }
+    .file-thumb {
+      height: 130px;
+      background: #0f172a;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      cursor: pointer;
+      overflow: hidden;
+    }
+    .file-thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .file-big-icon {
+      font-size: 3rem;
+    }
+    .ext-badge {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid var(--border);
+      color: var(--accent);
+      font-size: 0.68rem;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 4px;
+      text-transform: uppercase;
+    }
+    .file-body {
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      flex: 1;
+    }
+    .file-title {
+      font-weight: 600;
+      font-size: 0.88rem;
+      word-break: break-word;
+      cursor: pointer;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .file-title:hover {
+      color: var(--accent);
+    }
+    .file-sub {
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-top: auto;
+    }
+    .file-card-btns {
+      display: flex;
+      gap: 5px;
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+    }
+    .file-card-btns > * {
+      flex: 1;
+    }
+    /* Table View */
+    .table-wrap {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow-x: auto;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+    }
+    th, td {
+      padding: 11px 12px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+    th {
+      color: var(--muted);
+      font-weight: 600;
+      background: rgba(15, 23, 42, 0.5);
+    }
+    tr:hover td {
+      background: rgba(255, 255, 255, 0.02);
+    }
+    /* Modal */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.78);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 200;
+      padding: 16px;
+    }
+    .modal-backdrop.open {
+      display: flex;
+    }
+    .modal-box {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      width: 100%;
+      max-width: 850px;
+      max-height: 90vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .modal-head {
+      padding: 14px 18px;
+      background: var(--sidebar);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+    }
+    .modal-body {
+      padding: 18px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .modal-foot {
+      padding: 12px 18px;
+      background: var(--sidebar);
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+    input.form-input, textarea.form-input {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 10px 12px;
+      border-radius: 8px;
+      font-family: inherit;
+      font-size: 0.92rem;
+      width: 100%;
+    }
+    textarea.code-editor {
+      font-family: Consolas, monospace;
+      min-height: 340px;
+      line-height: 1.5;
+    }
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--muted);
+      background: var(--card);
+      border: 1px dashed var(--border);
+      border-radius: 10px;
+    }
+  </style>
+</head>
+<body>
+  <!-- Header Atas -->
+  <div class="topbar">
+    <div class="brand">
+      <div class="brand-icon">☁️</div>
+      <div>
+        <h1>
+          🐧 Linux Cloud Storage
+          <span class="badge-online">ONLINE</span>
+        </h1>
+        <div style="font-size: 0.76rem; color: var(--muted);" id="subHostInfo">Memuat info server...</div>
+      </div>
+    </div>
+
+    <div class="search-box">
+      <span>🔍</span>
+      <input type="text" id="searchInput" placeholder="Cari nama file atau folder di seluruh Cloud..." oninput="onSearchInput()" />
+      <button class="btn-sm btn-outline" onclick="clearSearch()" id="clearSearchBtn" style="display:none;">✖</button>
+    </div>
+
+    <div class="top-actions">
+      <button class="btn-outline" onclick="freeServerRam()" title="Bersihkan Cache & Garbage Collection RAM Server">⚡ Hemat RAM</button>
+      <button class="btn-outline" onclick="refreshAll()">🔄 Segarkan</button>
+    </div>
+  </div>
+
+  <!-- Layout Utama -->
+  <div class="layout">
+    <!-- Sidebar Kiri -->
+    <aside class="sidebar">
+      <div class="quick-create">
+        <button class="btn-upload-main" onclick="document.getElementById('fileInput').click()">
+          ⬆️ Upload File ke Sini
+        </button>
+        <input type="file" id="fileInput" multiple style="display:none" onchange="uploadFiles(this.files)" />
+        <button class="btn-outline" onclick="promptNewFolder()">📁 + Folder</button>
+        <button class="btn-outline" onclick="openTextModalNew()">📝 + File Teks</button>
+      </div>
+
+      <ul class="nav-list">
+        <li class="nav-item active" id="nav-all" onclick="switchCategory('all')">
+          <span>🗂️ Semua File & Folder</span>
+          <span class="nav-count" id="cnt-all">0</span>
+        </li>
+        <li class="nav-item" id="nav-image" onclick="switchCategory('image')">
+          <span>🖼️ Gambar & Foto</span>
+          <span class="nav-count" id="cnt-image">0</span>
+        </li>
+        <li class="nav-item" id="nav-video" onclick="switchCategory('video')">
+          <span>🎬 Video & Film</span>
+          <span class="nav-count" id="cnt-video">0</span>
+        </li>
+        <li class="nav-item" id="nav-audio" onclick="switchCategory('audio')">
+          <span>🎵 Musik & Audio</span>
+          <span class="nav-count" id="cnt-audio">0</span>
+        </li>
+        <li class="nav-item" id="nav-document" onclick="switchCategory('document')">
+          <span>📄 Dokumen & Kode</span>
+          <span class="nav-count" id="cnt-document">0</span>
+        </li>
+        <li class="nav-item" id="nav-archive" onclick="switchCategory('archive')">
+          <span>📦 Arsip & Aplikasi</span>
+          <span class="nav-count" id="cnt-archive">0</span>
+        </li>
+        <li class="nav-item" id="nav-notes" onclick="switchPanel('notes')">
+          <span>📌 Papan Catatan</span>
+        </li>
+        <li class="nav-item" id="nav-network" onclick="switchPanel('network')">
+          <span>🌐 Info IP & Cloudflared</span>
+        </li>
+      </ul>
+
+      <!-- Statistik Penyimpanan Cloud -->
+      <div class="storage-box">
+        <div class="storage-title">
+          <span>💾 Penyimpanan Cloud</span>
+          <span id="cloudTotalUsed" style="color: var(--accent);">0 B</span>
+        </div>
+        <div class="meter-bar" id="categoryMeter">
+          <div class="meter-seg" style="width:100%; background:#334155;"></div>
+        </div>
+        <div style="font-size: 0.75rem; color: var(--muted);" id="diskQuotaText">
+          Menghitung kapasitas disk...
+        </div>
+        <div class="storage-legend">
+          <div><span class="dot" style="background:#38bdf8;"></span>Foto: <b id="leg-image">0 B</b></div>
+          <div><span class="dot" style="background:#a855f7;"></span>Video: <b id="leg-video">0 B</b></div>
+          <div><span class="dot" style="background:#ec4899;"></span>Audio: <b id="leg-audio">0 B</b></div>
+          <div><span class="dot" style="background:#22c55e;"></span>Dokumen: <b id="leg-doc">0 B</b></div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Konten Utama -->
+    <main class="main">
+      <!-- Banner Akses Cepat Cloudflared & LAN -->
+      <div class="net-banner" id="quickNetBanner">
+        <div class="net-links" id="quickNetLinks">Memuat alamat akses...</div>
+      </div>
+
+      <!-- PANEL 1: CLOUD DRIVE EXPLORER -->
+      <div id="panelDrive">
+        <!-- Area Drag & Drop Upload -->
+        <div class="drop-banner" id="dropZone" onclick="document.getElementById('fileInput').click()">
+          <div style="font-weight: 600; font-size: 0.92rem;">
+            ☁️ Tarik & Lepas (Drag & Drop) File ke Sini atau Klik untuk Upload ke Folder <code id="targetFolderLabel" style="color: var(--accent);">/</code>
+          </div>
+          <div class="progress-wrap" id="uploadProgressWrap">
+            <div class="progress-bar"><div class="progress-fill" id="uploadProgressFill"></div></div>
+            <div id="uploadStatusText" style="font-size: 0.78rem; color: var(--accent); margin-top: 4px;"></div>
+          </div>
+        </div>
+
+        <!-- Bar Navigasi Folder (Breadcrumbs) & Pengaturan Tampilan -->
+        <div class="drive-header">
+          <div class="breadcrumbs" id="breadcrumbBar"></div>
+          <div class="view-controls">
+            <select id="sortSelect" onchange="renderDriveContent()">
+              <option value="newest">Urutkan: Terbaru</option>
+              <option value="name">Urutkan: Nama (A-Z)</option>
+              <option value="size">Urutkan: Ukuran Terbesar</option>
+              <option value="type">Urutkan: Jenis File</option>
+            </select>
+            <button class="btn-sm btn-outline" id="btnViewGrid" onclick="setViewMode('grid')">🔲 Grid</button>
+            <button class="btn-sm btn-outline" id="btnViewList" onclick="setViewMode('list')">📋 Tabel</button>
+          </div>
+        </div>
+
+        <!-- Daftar Folder -->
+        <div id="folderSection" style="display:none;">
+          <div class="sec-title" id="folderSecTitle">📁 Folder</div>
+          <div class="folder-grid" id="folderContainer"></div>
+        </div>
+
+        <!-- Daftar File -->
+        <div id="fileSection">
+          <div class="sec-title" id="fileSecTitle">📄 File</div>
+          <div id="fileContainer"></div>
+        </div>
+      </div>
+
+      <!-- PANEL 2: PAPAN CATATAN / CLIPBOARD -->
+      <div id="panelNotes" style="display:none;">
+        <h2 style="margin-bottom: 12px; color: var(--accent);">📌 Papan Catatan & Clipboard Lintas Perangkat</h2>
+        <div style="background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 18px;">
+          <form onsubmit="submitNote(event)" style="display:flex; flex-direction:column; gap:10px;">
+            <input class="form-input" type="text" id="noteAuthor" placeholder="Nama / Perangkat Anda (opsional)" />
+            <textarea class="form-input" id="noteText" rows="3" placeholder="Ketik teks, tautan, atau catatan untuk dibagikan..." required></textarea>
+            <div><button type="submit">Kirim Catatan</button></div>
+          </form>
+        </div>
+        <div id="notesContainer" style="display:flex; flex-direction:column; gap:10px;"></div>
+      </div>
+
+      <!-- PANEL 3: DETAIL JARINGAN & SISTEM -->
+      <div id="panelNetwork" style="display:none;">
+        <h2 style="margin-bottom: 12px; color: var(--accent);">🌐 Informasi Jaringan, Cloudflared & Sistem Server</h2>
+        <div id="fullNetworkDetails" style="display:grid; gap:14px;"></div>
+      </div>
+    </main>
+  </div>
+
+  <!-- MODAL PREVIEW MEDIA / EDITOR TEKS -->
+  <div class="modal-backdrop" id="previewModal" onclick="if(event.target===this) closeModal()">
+    <div class="modal-box">
+      <div class="modal-head">
+        <strong id="modalTitle" style="word-break:break-all;">Preview File</strong>
+        <button class="btn-sm btn-outline" onclick="closeModal()">✖ Tutup</button>
+      </div>
+      <div class="modal-body" id="modalBody"></div>
+      <div class="modal-foot" id="modalFoot"></div>
+    </div>
+  </div>
+
+  <script>
+    let currentPath = '/';
+    let currentCategory = 'all';
+    let currentPanel = 'drive';
+    let viewMode = 'grid';
+    let lastBrowseData = { folders: [], files: [] };
+    let serverInfoData = null;
+
+    const CATEGORY_ICONS = {
+      image: '🖼️',
+      video: '🎬',
+      audio: '🎵',
+      document: '📄',
+      archive: '📦',
+      other: '📎'
+    };
+
+    const CATEGORY_NAMES = {
+      all: 'Semua File & Folder',
+      image: 'Gambar & Foto',
+      video: 'Video & Film',
+      audio: 'Musik & Audio',
+      document: 'Dokumen & Kode',
+      archive: 'Arsip & Aplikasi',
+      other: 'File Lainnya'
+    };
+
+    function formatBytes(bytes) {
+      if (!bytes || bytes <= 0) return '0 B';
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    function escapeHtml(str) {
+      return String(str || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function copyText(txt) {
+      navigator.clipboard.writeText(txt);
+      alert('Disalin ke clipboard:\n' + txt);
+    }
+
+    // Muat Informasi Server & Kuota Penyimpanan
+    async function loadServerInfo() {
+      try {
+        const res = await fetch('/api/info');
+        const data = await res.json();
+        serverInfoData = data;
+
+        const ramBadge = data.serverRam
+          ? `⚡ RAM Server: Heap ${data.serverRam.heapMB} MB (Proses: ${data.serverRam.rssMB} MB)`
+          : `RAM Sistem: ${data.memory.usedGB}/${data.memory.totalGB} GB`;
+        document.getElementById('subHostInfo').textContent =
+          `${data.hostname} • ${ramBadge} • Sistem ${data.memory.usedGB}/${data.memory.totalGB} GB`;
+
+        // Update Counts di Sidebar
+        const st = data.storage;
+        if (st) {
+          document.getElementById('cnt-all').textContent = st.totalFiles + st.totalFolders;
+          document.getElementById('cnt-image').textContent = st.categories.image.count;
+          document.getElementById('cnt-video').textContent = st.categories.video.count;
+          document.getElementById('cnt-audio').textContent = st.categories.audio.count;
+          document.getElementById('cnt-document').textContent = st.categories.document.count;
+          document.getElementById('cnt-archive').textContent = st.categories.archive.count;
+
+          document.getElementById('cloudTotalUsed').textContent = formatBytes(st.totalBytes);
+          document.getElementById('leg-image').textContent = formatBytes(st.categories.image.bytes);
+          document.getElementById('leg-video').textContent = formatBytes(st.categories.video.bytes);
+          document.getElementById('leg-audio').textContent = formatBytes(st.categories.audio.bytes);
+          document.getElementById('leg-doc').textContent = formatBytes(st.categories.document.bytes);
+
+          const total = Math.max(st.totalBytes, 1);
+          const pImg = (st.categories.image.bytes / total) * 100;
+          const pVid = (st.categories.video.bytes / total) * 100;
+          const pAud = (st.categories.audio.bytes / total) * 100;
+          const pDoc = (st.categories.document.bytes / total) * 100;
+          document.getElementById('categoryMeter').innerHTML = `
+            <div class="meter-seg" style="width:${pImg}%; background:#38bdf8;"></div>
+            <div class="meter-seg" style="width:${pVid}%; background:#a855f7;"></div>
+            <div class="meter-seg" style="width:${pAud}%; background:#ec4899;"></div>
+            <div class="meter-seg" style="width:${pDoc}%; background:#22c55e;"></div>
+          `;
+
+          if (st.disk) {
+            document.getElementById('diskQuotaText').innerHTML =
+              `Disk Server: Terpakai <b>${formatBytes(st.disk.usedBytes)}</b> dari <b>${formatBytes(st.disk.totalBytes)}</b> (Sisa ${formatBytes(st.disk.freeBytes)})`;
+          } else {
+            document.getElementById('diskQuotaText').textContent =
+              `${st.totalFolders} Folder • ${st.totalFiles} File di Cloud`;
+          }
+        }
+
+        // Update Banner Jaringan Atas
+        let pills = '';
+        if (data.publicTunnelUrl) {
+          pills += `
+            <div class="net-pill" style="border-color: var(--success); color: var(--success);">
+              <span>🌐 Publik Cloudflared: <b>${data.publicTunnelUrl}</b></span>
+              <button class="btn-sm" onclick="copyText('${data.publicTunnelUrl}')">Salin</button>
+            </div>
+          `;
+        } else {
+          pills += `
+            <div class="net-pill" style="color: var(--muted);">
+              <span>🌐 Cloudflared belum aktif (Jalankan <b>./start-linux-server.sh</b> atau <b>3-AKSES-PUBLIK-TUNNEL.bat</b>)</span>
+            </div>
+          `;
+        }
+
+        if (data.networks && data.networks.length > 0) {
+          data.networks.forEach(n => {
+            pills += `
+              <div class="net-pill">
+                <span>📶 Wi-Fi/LAN (${n.interface}): <b style="color:var(--accent);">${n.url}</b></span>
+                <button class="btn-sm btn-outline" onclick="copyText('${n.url}')">Salin</button>
+              </div>
+            `;
+          });
+        }
+        document.getElementById('quickNetLinks').innerHTML = pills;
+
+        // Isi Detail Panel Jaringan
+        document.getElementById('fullNetworkDetails').innerHTML = `
+          <div style="background:var(--card); border:1px solid var(--border); border-radius:10px; padding:16px;">
+            <h3 style="margin-bottom:10px;">🔗 Alamat Koneksi Aktif</h3>
+            <div style="display:flex; flex-direction:column; gap:10px;">${pills}</div>
+          </div>
+          <div style="background:var(--card); border:1px solid var(--border); border-radius:10px; padding:16px;">
+            <h3 style="margin-bottom:10px;">🐧 Spesifikasi Linux Cloud Server</h3>
+            <p>Hostname: <b>${data.hostname}</b></p>
+            <p>OS: <b>${data.platform}</b></p>
+            <p>Node.js: <b>${data.nodeVersion}</b> | Port: <b>${data.port}</b></p>
+            <p>IP Pengunjung Saat Ini: <b>${data.clientIp}</b></p>
+            <p>Waktu Server: <b>${data.serverTime}</b></p>
+          </div>
+        `;
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    // Muat Isi Folder / Kategori / Pencarian
+    async function loadDrive() {
+      try {
+        const search = document.getElementById('searchInput').value.trim();
+        document.getElementById('clearSearchBtn').style.display = search ? 'inline-flex' : 'none';
+        document.getElementById('targetFolderLabel').textContent = currentPath;
+
+        const url = `/api/browse?path=${encodeURIComponent(currentPath)}&category=${encodeURIComponent(currentCategory)}&search=${encodeURIComponent(search)}`;
+        const res = await fetch(url);
+        const data = await res.json();
+        if (data.error) {
+          currentPath = '/';
+          return loadDrive();
+        }
+        lastBrowseData = data;
+        renderBreadcrumbs(search);
+        renderDriveContent();
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    function renderBreadcrumbs(searchQuery) {
+      const bar = document.getElementById('breadcrumbBar');
+      if (searchQuery) {
+        bar.innerHTML = `<span class="crumb" onclick="clearSearch()">🏠 Kembali</span> <span class="crumb-sep">/</span> <span>🔍 Hasil Pencarian: "${escapeHtml(searchQuery)}"</span>`;
+        return;
+      }
+      if (currentCategory !== 'all') {
+        bar.innerHTML = `<span class="crumb" onclick="switchCategory('all')">🏠 Cloud Drive</span> <span class="crumb-sep">/</span> <span>${CATEGORY_ICONS[currentCategory] || '📁'} Kategori: <b>${CATEGORY_NAMES[currentCategory]}</b></span>`;
+        return;
+      }
+
+      const parts = currentPath.split('/').filter(Boolean);
+      let html = `<span class="crumb" onclick="navigateTo('/')">🏠 Cloud Drive</span>`;
+      let acc = '';
+      for (const part of parts) {
+        acc += '/' + part;
+        const target = acc;
+        html += `<span class="crumb-sep">/</span><span class="crumb" onclick="navigateTo('${escapeHtml(target)}')">📁 ${escapeHtml(part)}</span>`;
+      }
+      if (parts.length > 0) {
+        const parentPath = parts.length > 1 ? '/' + parts.slice(0, -1).join('/') : '/';
+        html = `<button class="btn-sm btn-outline" onclick="navigateTo('${escapeHtml(parentPath)}')">⬅️ Naik</button>` + html;
+      }
+      bar.innerHTML = html;
+    }
+
+    function renderDriveContent() {
+      const sortBy = document.getElementById('sortSelect').value;
+      const folders = [...(lastBrowseData.folders || [])];
+      const files = [...(lastBrowseData.files || [])];
+
+      // Urutkan File
+      files.sort((a, b) => {
+        if (sortBy === 'name') return a.name.localeCompare(b.name);
+        if (sortBy === 'size') return b.size - a.size;
+        if (sortBy === 'type') return a.ext.localeCompare(b.ext);
+        return b.timestamp - a.timestamp;
+      });
+
+      // Render Folder
+      const folderSec = document.getElementById('folderSection');
+      const folderBox = document.getElementById('folderContainer');
+      if (folders.length > 0) {
+        folderSec.style.display = 'block';
+        document.getElementById('folderSecTitle').textContent = `📁 Folder (${folders.length})`;
+        folderBox.innerHTML = folders.map(f => `
+          <div class="folder-card" onclick="navigateTo('${escapeHtml(f.path)}')">
+            <div class="folder-left">
+              <div class="folder-icon">📁</div>
+              <div style="overflow:hidden;">
+                <div class="folder-name" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}</div>
+                <div class="folder-meta">${f.itemCount} item • ${f.modified.split(',')[0]}</div>
+              </div>
+            </div>
+            <div class="folder-actions" onclick="event.stopPropagation()">
+              <button class="btn-sm btn-outline" title="Ganti Nama" onclick="promptRename('${escapeHtml(f.path)}', '${escapeHtml(f.name)}')">✏️</button>
+              <button class="btn-sm btn-danger" title="Hapus Folder" onclick="deleteItem('${escapeHtml(f.path)}', '${escapeHtml(f.name)}')">🗑️</button>
+            </div>
+          </div>
+        `).join('');
+      } else {
+        folderSec.style.display = 'none';
+      }
+
+      // Render File
+      const fileBox = document.getElementById('fileContainer');
+      document.getElementById('fileSecTitle').textContent = `📄 File (${files.length})`;
+
+      if (files.length === 0) {
+        fileBox.innerHTML = `
+          <div class="empty-state">
+            <div style="font-size: 2.4rem; margin-bottom: 8px;">📂</div>
+            <div style="font-weight: 600;">Belum ada file di lokasi atau kategori ini</div>
+            <div style="font-size: 0.84rem; margin-top: 4px;">Klik tombol "Upload File" atau tarik file ke kotak di atas untuk menambahkan file.</div>
+          </div>
+        `;
+        return;
+      }
+
+      if (viewMode === 'grid') {
+        fileBox.innerHTML = `<div class="file-grid">${files.map(f => {
+          const thumbContent = f.category === 'image'
+            ? `<img src="${f.url}" alt="${escapeHtml(f.name)}" loading="lazy" />`
+            : `<div class="file-big-icon">${CATEGORY_ICONS[f.category] || '📎'}</div>`;
+
+          return `
+            <div class="file-card">
+              <div class="file-thumb" onclick="openFilePreview(${ JSON.stringify(f).replace(/"/g, '&quot;') })">
+                ${thumbContent}
+                <span class="ext-badge">${escapeHtml(f.ext.replace('.', '') || 'FILE')}</span>
+              </div>
+              <div class="file-body">
+                <div class="file-title" title="${escapeHtml(f.name)}" onclick="openFilePreview(${ JSON.stringify(f).replace(/"/g, '&quot;') })">
+                  ${escapeHtml(f.name)}
+                </div>
+                <div class="file-sub">
+                  ${formatBytes(f.size)} • ${f.folder !== currentPath ? `📁 ${escapeHtml(f.folder)}` : f.modified.split(',')[0]}
+                </div>
+                <div class="file-card-btns">
+                  <button class="btn-sm btn-outline" onclick="openFilePreview(${ JSON.stringify(f).replace(/"/g, '&quot;') })" title="Buka / Preview">👁️ Buka</button>
+                  <a class="btn btn-sm" href="${f.url}?download=1" title="Unduh">⬇️</a>
+                  <button class="btn-sm btn-outline" onclick="promptRename('${escapeHtml(f.path)}', '${escapeHtml(f.name)}')" title="Ganti Nama">✏️</button>
+                  <button class="btn-sm btn-outline" onclick="promptMove('${escapeHtml(f.path)}', '${escapeHtml(f.folder)}')" title="Pindahkan ke Folder Lain">📂</button>
+                  <button class="btn-sm btn-danger" onclick="deleteItem('${escapeHtml(f.path)}', '${escapeHtml(f.name)}')" title="Hapus">🗑️</button>
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('')}</div>`;
+      } else {
+        fileBox.innerHTML = `
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Nama File</th>
+                  <th>Kategori</th>
+                  <th>Folder</th>
+                  <th>Ukuran</th>
+                  <th>Diubah</th>
+                  <th style="text-align:right;">Aksi</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${files.map(f => `
+                  <tr>
+                    <td>
+                      <span style="cursor:pointer; color:var(--accent); font-weight:600;" onclick="openFilePreview(${ JSON.stringify(f).replace(/"/g, '&quot;') })">
+                        ${CATEGORY_ICONS[f.category] || '📎'} ${escapeHtml(f.name)}
+                      </span>
+                    </td>
+                    <td><span class="ext-badge" style="position:static;">${escapeHtml(f.ext.replace('.', '') || 'FILE')}</span></td>
+                    <td style="color:var(--muted);">${escapeHtml(f.folder)}</td>
+                    <td>${formatBytes(f.size)}</td>
+                    <td style="color:var(--muted); font-size:0.8rem;">${f.modified}</td>
+                    <td style="text-align:right;">
+                      <div style="display:inline-flex; gap:5px;">
+                        <button class="btn-sm btn-outline" onclick="openFilePreview(${ JSON.stringify(f).replace(/"/g, '&quot;') })">Buka</button>
+                        <a class="btn btn-sm" href="${f.url}?download=1">Unduh</a>
+                        <button class="btn-sm btn-outline" onclick="promptRename('${escapeHtml(f.path)}', '${escapeHtml(f.name)}')">✏️</button>
+                        <button class="btn-sm btn-outline" onclick="promptMove('${escapeHtml(f.path)}', '${escapeHtml(f.folder)}')">📂</button>
+                        <button class="btn-sm btn-danger" onclick="deleteItem('${escapeHtml(f.path)}', '${escapeHtml(f.name)}')">🗑️</button>
+                      </div>
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        `;
+      }
+    }
+
+    // Navigasi & Filter
+    function navigateTo(folderPath) {
+      currentPath = folderPath || '/';
+      currentCategory = 'all';
+      switchPanel('drive', false);
+      updateNavHighlight('nav-all');
+      loadDrive();
+    }
+
+    function switchCategory(cat) {
+      currentCategory = cat;
+      switchPanel('drive', false);
+      updateNavHighlight('nav-' + cat);
+      loadDrive();
+    }
+
+    function switchPanel(panel, updateNav = true) {
+      currentPanel = panel;
+      document.getElementById('panelDrive').style.display = panel === 'drive' ? 'block' : 'none';
+      document.getElementById('panelNotes').style.display = panel === 'notes' ? 'block' : 'none';
+      document.getElementById('panelNetwork').style.display = panel === 'network' ? 'block' : 'none';
+      if (updateNav) {
+        updateNavHighlight('nav-' + panel);
+      }
+      if (panel === 'notes') loadNotes();
+      if (panel === 'network') loadServerInfo();
+    }
+
+    function updateNavHighlight(activeId) {
+      document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+      const target = document.getElementById(activeId);
+      if (target) target.classList.add('active');
+    }
+
+    function setViewMode(mode) {
+      viewMode = mode;
+      renderDriveContent();
+    }
+
+    let searchTimer = null;
+    function onSearchInput() {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => {
+        switchPanel('drive', false);
+        loadDrive();
+      }, 250);
+    }
+
+    function clearSearch() {
+      document.getElementById('searchInput').value = '';
+      loadDrive();
+    }
+
+    // Operasi Folder & File
+    async function promptNewFolder() {
+      const name = prompt(`Buat Folder Baru di dalam "${currentPath}":\nMasukkan nama folder:`);
+      if (!name || !name.trim()) return;
+      const res = await fetch('/api/folder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ parentPath: currentPath, name: name.trim() })
+      });
+      const data = await res.json();
+      if (data.error) alert('Gagal: ' + data.error);
+      refreshAll();
+    }
+
+    async function promptRename(oldPath, oldName) {
+      const newName = prompt(`Ganti nama "${oldName}" menjadi:`, oldName);
+      if (!newName || !newName.trim() || newName.trim() === oldName) return;
+      const res = await fetch('/api/rename', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ oldPath, newName: newName.trim() })
+      });
+      const data = await res.json();
+      if (data.error) alert('Gagal: ' + data.error);
+      refreshAll();
+    }
+
+    async function promptMove(oldPath, currentFolder) {
+      const targetFolder = prompt(
+        `Pindahkan "${oldPath}" ke folder tujuan:\n(Contoh: / atau /Dokumen atau /Gambar & Foto)`,
+        currentFolder || '/'
+      );
+      if (!targetFolder || !targetFolder.trim()) return;
+      const res = await fetch('/api/rename', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ oldPath, targetFolder: targetFolder.trim() })
+      });
+      const data = await res.json();
+      if (data.error) alert('Gagal memindahkan: ' + data.error);
+      refreshAll();
+    }
+
+    async function deleteItem(itemPath, itemName) {
+      if (!confirm(`Yakin ingin menghapus "${itemName}" secara permanen?`)) return;
+      const res = await fetch(`/api/item?path=${encodeURIComponent(itemPath)}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.error) alert('Gagal menghapus: ' + data.error);
+      refreshAll();
+    }
+
+    // Upload Banyak File Sekaligus ke Folder Aktif
+    async function uploadFiles(files) {
+      if (!files || files.length === 0) return;
+      const wrap = document.getElementById('uploadProgressWrap');
+      const fill = document.getElementById('uploadProgressFill');
+      const status = document.getElementById('uploadStatusText');
+      wrap.style.display = 'block';
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        status.textContent = `Mengunggah (${i + 1}/${files.length}): ${file.name} ke ${currentPath} ...`;
+        fill.style.width = '10%';
+
+        await new Promise((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open('POST', `/api/upload?folder=${encodeURIComponent(currentPath)}`, true);
+          xhr.setRequestHeader('X-File-Name', encodeURIComponent(file.name));
+          xhr.setRequestHeader('X-Target-Folder', encodeURIComponent(currentPath));
+
+          xhr.upload.onprogress = (e) => {
+            if (e.lengthComputable) {
+              const pct = Math.round((e.loaded / e.total) * 100);
+              fill.style.width = pct + '%';
+            }
+          };
+          xhr.onload = () => resolve();
+          xhr.onerror = () => reject();
+          xhr.send(file);
+        });
+      }
+
+      status.textContent = '✅ Semua file berhasil diunggah!';
+      document.getElementById('fileInput').value = '';
+      setTimeout(() => {
+        wrap.style.display = 'none';
+        fill.style.width = '0%';
+      }, 2200);
+      refreshAll();
+    }
+
+    // Preview Modal (Gambar, Video, Audio, PDF, & Editor File Teks)
+    async function openFilePreview(file) {
+      const modal = document.getElementById('previewModal');
+      const title = document.getElementById('modalTitle');
+      const body = document.getElementById('modalBody');
+      const foot = document.getElementById('modalFoot');
+
+      title.textContent = `${file.name} (${formatBytes(file.size)})`;
+      foot.innerHTML = `
+        <a class="btn" href="${file.url}?download=1">⬇️ Unduh File</a>
+        <a class="btn btn-outline" href="${file.url}" target="_blank">↗️ Buka di Tab Baru</a>
+      `;
+
+      if (file.category === 'image') {
+        body.innerHTML = `<div style="text-align:center;"><img src="${file.url}" style="max-width:100%; max-height:70vh; border-radius:8px;" /></div>`;
+      } else if (file.category === 'video') {
+        body.innerHTML = `<video src="${file.url}" controls autoplay style="width:100%; max-height:70vh; border-radius:8px; background:#000;"></video>`;
+      } else if (file.category === 'audio') {
+        body.innerHTML = `
+          <div style="text-align:center; padding:30px;">
+            <div style="font-size:4rem; margin-bottom:12px;">🎵</div>
+            <audio src="${file.url}" controls autoplay style="width:100%;"></audio>
+          </div>
+        `;
+      } else if (file.ext === '.pdf') {
+        body.innerHTML = `<iframe src="${file.url}" style="width:100%; height:70vh; border:none; border-radius:8px;"></iframe>`;
+      } else if (file.isText && file.size < 2 * 1024 * 1024) {
+        body.innerHTML = `<p style="color:var(--muted);">Memuat isi file teks...</p>`;
+        modal.classList.add('open');
+        const res = await fetch(file.url);
+        const txt = await res.text();
+        body.innerHTML = `
+          <textarea class="form-input code-editor" id="cloudTextEditor">${escapeHtml(txt)}</textarea>
+        `;
+        foot.innerHTML = `
+          <button onclick="saveEditedTextFile('${escapeHtml(file.folder)}', '${escapeHtml(file.name)}')">💾 Simpan Perubahan</button>
+          <a class="btn btn-outline" href="${file.url}?download=1">⬇️ Unduh</a>
+        `;
+        return;
+      } else {
+        body.innerHTML = `
+          <div style="text-align:center; padding:30px;">
+            <div style="font-size:3.5rem; margin-bottom:10px;">${CATEGORY_ICONS[file.category] || '📦'}</div>
+            <p>File <b>${escapeHtml(file.name)}</b> siap diunduh.</p>
+            <p style="color:var(--muted); font-size:0.85rem; margin-top:4px;">Lokasi: ${escapeHtml(file.path)} • Ukuran: ${formatBytes(file.size)}</p>
+          </div>
+        `;
+      }
+
+      modal.classList.add('open');
+    }
+
+    function openTextModalNew() {
+      const modal = document.getElementById('previewModal');
+      document.getElementById('modalTitle').textContent = `📝 Buat File Teks Baru di ${currentPath}`;
+      document.getElementById('modalBody').innerHTML = `
+        <input class="form-input" id="newTextFileName" placeholder="Nama file (contoh: catatan_kerja.txt)" value="catatan.txt" />
+        <textarea class="form-input code-editor" id="cloudTextEditor" placeholder="Ketik isi dokumen atau kode di sini..."></textarea>
+      `;
+      document.getElementById('modalFoot').innerHTML = `
+        <button onclick="createNewTextFile()">💾 Simpan ke Cloud</button>
+      `;
+      modal.classList.add('open');
+    }
+
+    async function createNewTextFile() {
+      const name = document.getElementById('newTextFileName').value.trim();
+      const content = document.getElementById('cloudTextEditor').value;
+      if (!name) return alert('Masukkan nama file terlebih dahulu');
+      await saveEditedTextFile(currentPath, name, content);
+    }
+
+    async function saveEditedTextFile(folder, name, customContent) {
+      const content = customContent !== undefined ? customContent : document.getElementById('cloudTextEditor').value;
+      const res = await fetch('/api/textfile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folder, name, content })
+      });
+      const data = await res.json();
+      if (data.error) return alert('Gagal menyimpan: ' + data.error);
+      closeModal();
+      refreshAll();
+    }
+
+    function closeModal() {
+      const modal = document.getElementById('previewModal');
+      const body = document.getElementById('modalBody');
+      body.querySelectorAll('video, audio').forEach(media => {
+        try {
+          media.pause();
+          media.removeAttribute('src');
+          media.load();
+        } catch {}
+      });
+      body.innerHTML = '';
+      modal.classList.remove('open');
+    }
+
+    async function freeServerRam() {
+      try {
+        const res = await fetch('/api/gc', { method: 'POST' });
+        const data = await res.json();
+        await loadServerInfo();
+        alert(`✅ ${data.message}\nPenggunaan Memori Heap Server: ${data.heapMB} MB\nTotal Proses Server (RSS): ${data.rssMB} MB`);
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    // Papan Catatan
+    async function loadNotes() {
+      const res = await fetch('/api/notes');
+      const data = await res.json();
+      const box = document.getElementById('notesContainer');
+      box.innerHTML = (data.notes || []).map(n => `
+        <div style="background:var(--card); border:1px solid var(--border); border-radius:10px; padding:14px;">
+          <div style="display:flex; justify-content:space-between; font-size:0.78rem; color:var(--muted); margin-bottom:6px;">
+            <strong>${escapeHtml(n.author)}</strong>
+            <span>${n.time}</span>
+          </div>
+          <div style="white-space:pre-wrap; word-break:break-word;">${escapeHtml(n.text)}</div>
+        </div>
+      `).join('');
+    }
+
+    async function submitNote(e) {
+      e.preventDefault();
+      const author = document.getElementById('noteAuthor').value;
+      const text = document.getElementById('noteText').value;
+      await fetch('/api/notes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ author, text })
+      });
+      document.getElementById('noteText').value = '';
+      loadNotes();
+    }
+
+    // Drag & Drop
+    const dropZone = document.getElementById('dropZone');
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropZone.classList.add('dragover');
+    });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+      uploadFiles(e.dataTransfer.files);
+    });
+
+    function refreshAll() {
+      loadServerInfo();
+      loadDrive();
+    }
+
+    refreshAll();
+  </script>
+</body>
+</html>

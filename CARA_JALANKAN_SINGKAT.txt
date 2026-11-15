@@ -1,0 +1,39 @@
+====================================================================
+   CARA CEPAT MENJALANKAN LINUX CLOUD STORAGE SERVER + CLOUDFLARED
+====================================================================
+
+A. JIKA DIJALANKAN DI LINUX SERVER (Ubuntu / Debian / Alpine / WSL):
+--------------------------------------------------------------------
+1. Masuk ke folder server di terminal Linux:
+   cd "/mnt/c/My Server"     (jika via WSL di Windows)
+   atau:
+   cd ~/my-server            (jika di Linux Server murni)
+
+2. Jalankan Setup Otomatis (Cukup 1x di awal):
+   chmod +x *.sh
+   ./setup-linux-server.sh
+   (Otomatis menginstal Node.js, mengunduh cloudflared Linux sesuai
+    CPU x64/ARM, dan membuka Port 8080 di Firewall Linux UFW/iptables)
+
+3. Nyalakan Server Cloud + Cloudflared Tunnel:
+   ./start-linux-server.sh
+
+4. Pasang Auto-Start Saat Linux Booting / Headless (Opsional):
+   ./install-systemd-service.sh
+
+
+B. JIKA DIJALANKAN LANGSUNG DI WINDOWS (Tanpa Install Linux):
+--------------------------------------------------------------------
+1. Klik kanan "1-BUKA-FIREWALL-ADMIN.bat" -> Run as Administrator (1x).
+2. Klik 2x "2-JALANKAN-SERVER.bat" (Menyalakan Cloud Storage Server).
+3. Klik 2x "3-AKSES-PUBLIK-TUNNEL.bat" (Membuka link Cloudflared).
+
+
+C. ALAMAT UNTUK MEMBUKA CLOUD STORAGE DI BROWSER:
+--------------------------------------------------------------------
+- Dari Mesin Server Sendiri  : http://localhost:8080
+- Dari HP / Laptop Satu WiFi : http://192.168.1.15:8080
+  (Cek IP Wi-Fi/LAN di Linux dengan: hostname -I  atau ./cek-status-linux.sh)
+- Dari Internet Publik Luar  : https://xxxx-xxxx.trycloudflare.com
+  (Link tampil di terminal dan otomatis muncul di bagian atas halaman web)
+====================================================================

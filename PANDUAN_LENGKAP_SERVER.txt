@@ -1,0 +1,211 @@
+================================================================================
+   PANDUAN LENGKAP STEP-BY-STEP: PEMBUATAN & PENGAKTIFAN LINUX CLOUD SERVER
+          (ULTRA RINGAN) DENGAN KONEKSI IP ADDRESS WIFI / LAN & CLOUDFLARED
+================================================================================
+
+Lokasi Folder Server : C:\My Server  (atau /mnt/c/My Server di WSL / ~/my-server)
+IP LAN/Wi-Fi Saat Ini: 192.168.1.15  (Gateway Router: 192.168.1.1)
+Port Default Server  : 8080 (TCP)
+Konsumsi RAM Server  : ~25 MB - 35 MB (Zero-Dependency Node.js di Linux)
+
+--------------------------------------------------------------------------------
+DAFTAR ISI:
+  BAGIAN 1 : Mengapa Linux Server Sangat Ringan & Cara Kerja IP Wi-Fi/LAN ke Publik
+  BAGIAN 2 : Daftar File & Script Linux (.sh) di Dalam Folder Server
+  BAGIAN 3 : Step-by-Step Koneksi Wi-Fi / LAN & Cek IP di Terminal Linux Server
+  BAGIAN 4 : Step-by-Step Cara Mengaktifkan Server + Cloudflared di Linux Server
+  BAGIAN 5 : Step-by-Step Akses Publik via Cloudflare Tunnel (cloudflared Linux)
+  BAGIAN 6 : Step-by-Step Akses Publik via Router Port Forwarding (IP Wi-Fi ISP)
+  BAGIAN 7 : Cara Agar Server Otomatis Aktif Saat Linux Booting (Systemd Service)
+  BAGIAN 8 : Alternatif Menjalankan Linux Server via WSL atau Docker Alpine
+--------------------------------------------------------------------------------
+
+
+================================================================================
+BAGIAN 1: MENGAPA LINUX SERVER SANGAT RINGAN & CARA KERJA IP WI-FI/LAN
+================================================================================
+
+1. Keunggulan Menggunakan Linux Server (Ubuntu Server / Debian / Alpine Linux):
+   - Tanpa beban tampilan grafis (GUI/Desktop), Linux Server hanya memakan
+     ~120 MB RAM untuk OS dan ~25 MB RAM untuk program `server.js` ini.
+   - Dapat menyala 24 jam nonstop dengan stabil di PC tua, laptop bekas,
+     Mini PC, STB Armbian, Raspberry Pi, maupun Virtual Machine / WSL.
+
+2. Tiga Tingkatan Alamat Akses Jaringan yang Digunakan:
+   a) IP Localhost (`127.0.0.1:8080`)
+      -> Untuk akses dari dalam mesin server itu sendiri.
+   b) IP Address Wi-Fi / LAN (`192.168.1.15:8080` pada `wlan0` atau `eth0`)
+      -> Diberikan oleh Router Wi-Fi (`192.168.1.1`). Karena `server.js`
+         mengikat ke `0.0.0.0:8080`, semua HP dan laptop di satu Wi-Fi/LAN
+         yang sama bisa langsung membuka Cloud Storage tanpa kuota internet!
+   c) Akses Publik Internet (`https://xxxx.trycloudflare.com` via `cloudflared`)
+      -> Menggunakan Cloudflare Tunnel untuk meneruskan `localhost:8080` ke
+         jaringan publik Cloudflare secara aman (HTTPS) tanpa terhalang CGNAT ISP.
+
+
+================================================================================
+BAGIAN 2: DAFTAR FILE & SCRIPT LINUX (.sh) YANG SUDAH DISEDIAKAN
+================================================================================
+
+File Inti Cloud Storage (Cross-Platform Linux & Windows):
+  1. `server.js`
+     -> Backend Cloud Storage Server (tanpa library tambahan / zero-dependency).
+        Mendukung pembuatan folder/sub-folder, upload banyak file, filter jenis
+        file (Gambar, Video, Audio, Dokumen, Arsip), streaming video/musik
+        (HTTP 206 Range), text editor, rename/move, dan statistik kapasitas disk.
+  2. `public/index.html`
+     -> Antarmuka Web Cloud Drive modern (Grid Thumbnail & Tabel).
+  3. `shared_files/`
+     -> Direktori utama tempat seluruh folder dan file Cloud disimpan.
+
+Script Otomatis Khusus Linux Server (Format Unix LF):
+  4. `setup-linux-server.sh`
+     -> Script instalasi 1x jalan di Linux: menginstal Node.js, mengunduh binary
+        resmi `cloudflared` sesuai arsitektur CPU (`amd64` / `arm64` / `arm`),
+        serta membuka Port `8080/tcp` di Firewall Linux (`ufw` / `iptables`).
+  5. `start-linux-server.sh`
+     -> Script untuk menyalakan Cloud Storage Server di background sekaligus
+        membuka tunnel publik `cloudflared`.
+  6. `install-systemd-service.sh`
+     -> Script untuk mendaftarkan server & `cloudflared` sebagai layanan
+        background Linux (`systemd`) agar otomatis menyala saat komputer boot.
+  7. `cek-status-linux.sh`
+     -> Script diagnostik Linux untuk melihat IP `wlan0`/`eth0`, status Port 8080,
+        IP Publik ISP, dan link aktif `trycloudflare.com`.
+  8. `docker-compose.yml`
+     -> Konfigurasi kontainer **Alpine Linux (`node:22-alpine`)** super ringan
+        jika Anda ingin menjalankan server menggunakan Docker.
+
+
+================================================================================
+BAGIAN 3: STEP-BY-STEP KONEKSI WI-FI / LAN & CEK IP DI TERMINAL LINUX SERVER
+================================================================================
+
+Jika Anda menggunakan Linux Server (tanpa GUI) dan ingin menghubungkannya ke
+jaringan Wi-Fi atau kabel LAN:
+
+LANGKAH 1: Menghubungkan Linux Server ke Wi-Fi via Terminal (Jika Pakai Wi-Fi)
+  Gunakan perintah `nmcli` (NetworkManager):
+  1. Cek daftar nama Wi-Fi (SSID) yang tersedia:
+     `nmcli device wifi list`
+  2. Hubungkan ke Wi-Fi Anda:
+     `sudo nmcli device wifi connect "NAMA_WIFI_ANDA" password "PASSWORD_WIFI"`
+
+LANGKAH 2: Mengecek Alamat IP Wi-Fi (`wlan0`) atau LAN (`eth0` / `enp0s3`)
+  Ketik salah satu perintah berikut di terminal Linux:
+    `hostname -I`
+  atau:
+    `ip -4 -br addr show`
+  Contoh hasil: `192.168.1.15`
+  Catat alamat IP tersebut! Alamat `http://192.168.1.15:8080` adalah alamat
+  untuk membuka Cloud Storage dari perangkat lain di jaringan Wi-Fi yang sama.
+
+
+================================================================================
+BAGIAN 4: STEP-BY-STEP CARA MENGAKTIFKAN SERVER DI LINUX SERVER
+================================================================================
+
+Ikuti 3 langkah mudah ini di terminal Linux Anda:
+
+LANGKAH 1: Masuk ke Direktori Server
+  Jika Anda menyalin folder ini ke Linux Server (misal di `~/my-server`):
+    `cd ~/my-server`
+  Atau jika Anda membuka melalui WSL (Ubuntu) di komputer ini:
+    `cd "/mnt/c/My Server"`
+
+LANGKAH 2: Jalankan Script Setup Linux (Cukup 1 Kali di Awal)
+  Ketik perintah berikut:
+    `chmod +x *.sh`
+    `./setup-linux-server.sh`
+  Apa yang dilakukan script ini secara otomatis?
+  - Memeriksa dan menginstal `nodejs` serta `curl` (mendukung `apt` Ubuntu/Debian,
+    `apk` Alpine Linux, dan `dnf`/`yum` CentOS/RHEL).
+  - Mengunduh binary resmi `cloudflared` Linux (`amd64` untuk PC/Laptop Intel/AMD,
+    atau `arm64` untuk Raspberry Pi/STB).
+  - Membuka Port `8080/tcp` pada Firewall Linux (`ufw allow 8080/tcp` atau
+    `iptables`) agar koneksi dari perangkat Wi-Fi/LAN diizinkan masuk.
+
+LANGKAH 3: Nyalakan Cloud Storage Server + Cloudflared
+  Ketik perintah berikut:
+    `./start-linux-server.sh`
+  (Atau jika hanya ingin menyalakan untuk jaringan Wi-Fi/LAN lokal saja tanpa
+   internet publik, ketik: `./start-linux-server.sh --local`)
+
+
+================================================================================
+BAGIAN 5: STEP-BY-STEP AKSES PUBLIK VIA CLOUDFLARED TUNNEL DI LINUX
+================================================================================
+
+Saat Anda menjalankan `./start-linux-server.sh`, script akan otomatis:
+1. Menjalankan `node server.js` di latar belakang (`server.log`).
+2. Menjalankan `./cloudflared tunnel --url http://localhost:8080 --logfile ./cloudflared.log`.
+3. Dalam beberapa detik, di layar terminal akan muncul kotak berisi link HTTPS:
+   `https://xxxx-xxxx-xxxx.trycloudflare.com`
+4. Server Cloud Storage (`server.js`) secara otomatis membaca file `cloudflared.log`
+   dan menampilkan link `trycloudflare.com` tersebut di bagian paling atas
+   halaman Web Dashboard (`http://localhost:8080` / `http://192.168.1.15:8080`).
+5. Anda juga bisa mengecek link publik yang sedang aktif kapan saja dengan:
+   `./cek-status-linux.sh`
+
+
+================================================================================
+BAGIAN 6: STEP-BY-STEP AKSES PUBLIK VIA ROUTER PORT FORWARDING (IP WI-FI)
+================================================================================
+
+Selain menggunakan `cloudflared`, Anda juga tetap bisa memanfaatkan IP Publik dari
+Router Wi-Fi (`192.168.1.1`) menggunakan fitur Port Forwarding:
+
+1. Kunci IP Linux Server Anda agar tetap di `192.168.1.15` (bisa melalui menu
+   **DHCP Reservation / Static Lease** di halaman admin router `http://192.168.1.1`
+   berdasarkan alamat MAC Linux Anda).
+2. Di halaman admin Router (`http://192.168.1.1`), buka menu **Port Forwarding /
+   Virtual Server / NAT**.
+3. Tambahkan aturan baru:
+   - Protocol           : TCP
+   - External / WAN Port: 8080
+   - Internal / LAN Port: 8080
+   - Internal Server IP : 192.168.1.15
+4. Cek IP Publik ISP Anda menggunakan `./cek-status-linux.sh`, lalu akses melalui
+   `http://[IP-PUBLIK-ANDA]:8080`.
+
+
+================================================================================
+BAGIAN 7: CARA AGAR SERVER OTOMATIS AKTIF SAAT LINUX BOOTING (SYSTEMD)
+================================================================================
+
+Di Linux Server, cara paling ringan dan stabil agar server berjalan otomatis
+di background (tanpa perlu login ke terminal) adalah menggunakan `systemd`:
+
+1. Jalankan script pemasang service yang sudah disediakan:
+   `./install-systemd-service.sh`
+2. Pilih angka `1` lalu tekan Enter.
+3. Script akan membuat dan mengaktifkan 2 service Linux:
+   - `cloud-storage.service` (Menjalankan `node server.js`)
+   - `cloud-tunnel.service`  (Menjalankan `cloudflared` tunnel)
+4. Perintah berguna untuk mengelola service di Linux:
+   - Cek status server  : `sudo systemctl status cloud-storage`
+   - Cek link Cloudflared: `./cek-status-linux.sh`
+   - Restart server     : `sudo systemctl restart cloud-storage`
+
+
+================================================================================
+BAGIAN 8: CARA MENJALANKAN LINUX SERVER DI MESIN WINDOWS INI (WSL / DOCKER)
+================================================================================
+
+Jika Anda ingin menjalankan lingkungan Linux Server yang ringan langsung dari
+komputer ini, Anda punya 2 pilihan:
+
+OPSI 1: Mengaktifkan WSL (Ubuntu / Debian Linux di Windows)
+  1. Buka PowerShell sebagai Administrator, lalu jalankan:
+     `wsl --install -d Debian`  (Debian Linux sangat ringan & cepat)
+  2. Setelah restart dan masuk ke terminal Linux, ketik:
+     `cd "/mnt/c/My Server"`
+     `./setup-linux-server.sh`
+     `./start-linux-server.sh`
+
+OPSI 2: Menggunakan Docker Alpine Linux (`node:22-alpine` - Hanya ~40 MB)
+  Jika Anda menggunakan Docker di Linux atau Windows, cukup jalankan:
+     `docker compose up -d`
+  Perintah ini akan langsung menyalakan kontainer Alpine Linux untuk Cloud
+  Storage (`port 8080`) sekaligus kontainer `cloudflared` secara otomatis!
+================================================================================
