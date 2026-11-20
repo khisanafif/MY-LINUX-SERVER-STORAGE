@@ -1,8 +1,0 @@
-Selamat datang di Linux Cloud Storage (Mode Hemat RAM)!
-
-Fitur Cloud yang tersedia:
-1. Buat Folder & Sub-folder tanpa batas
-2. Upload banyak file sekaligus (Drag & Drop) dengan buffer hemat RAM (64 KB)
-3. Filter otomatis berdasarkan Jenis File (Gambar, Video, Audio, Dokumen, Arsip)
-4. Preview Gambar, Pemutar Video/Musik langsung di browser, dan Editor File Teks
-5. Ganti Nama (Rename), Pindahkan, Unduh, dan Hapus File/Folder
