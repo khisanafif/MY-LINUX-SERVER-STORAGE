@@ -1,0 +1,16 @@
+# Semua file & folder yang diunggah ke penyimpanan server
+shared_files/*
+shared_notes.json
+
+# State runtime, antrean upload, sampah, log & keamanan server
+.upload_tmp/
+.trash/
+.server_config.json
+server.log
+cloudflared.log
+
+# Binary & artefak build lokal
+cloudflared
+android-app/build/
+*.idsig
+__pycache__/

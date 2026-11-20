@@ -1,0 +1,592 @@
+#!/usr/bin/env python3
+"""
+Linux Cloud Drive - Standalone Desktop Application & Managed Server Launcher.
+
+Menjalankan Cloud Storage server (Node.js ultra-low-RAM) secara otomatis jika belum
+aktif di port tujuan, lalu membukanya di jendela desktop mandiri berbasis GTK3 + WebKit2.
+Dilengkapi System Tray agar upload tetap berjalan di background meski jendela ditutup/ditinggal.
+"""
+
+import argparse
+import glob
+import json
+import os
+import shutil
+import signal
+import socket
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+APP_DIR = Path(__file__).resolve().parent
+SERVER_JS = APP_DIR / "server.js"
+ICON_PATH = APP_DIR / "assets" / "linux-cloud-drive.svg"
+SERVER_LOG = APP_DIR / "server.log"
+CLOUDFLARED_LOG = APP_DIR / "cloudflared.log"
+APP_ID = "linux-cloud-drive"
+APP_NAME = "Linux Cloud Drive"
+
+
+def find_cloudflared_binary() -> str | None:
+    """Cari binary cloudflared Linux baik di folder proyek maupun PATH."""
+    candidates = [
+        str(APP_DIR / "cloudflared"),
+        shutil.which("cloudflared"),
+        "/usr/local/bin/cloudflared",
+        "/usr/bin/cloudflared",
+    ]
+    for candidate in candidates:
+        if candidate and os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+            return candidate
+    return None
+
+
+def is_cloudflared_running() -> bool:
+    """Cek apakah proses cloudflared sudah berjalan di Linux."""
+    try:
+        for entry in os.listdir("/proc"):
+            if not entry.isdigit():
+                continue
+            try:
+                with open(f"/proc/{entry}/comm", "r", encoding="utf-8") as fh:
+                    if fh.read().strip() == "cloudflared":
+                        return True
+            except OSError:
+                pass
+    except OSError:
+        return False
+    return False
+
+
+def fetch_tunnel_url(port: int, timeout: float = 0.6) -> str | None:
+    """Ambil URL publik cloudflared terbaru dari server lokal."""
+    try:
+        req = urllib.request.Request(f"http://127.0.0.1:{port}/api/info", method="GET")
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            if resp.status == 200:
+                data = json.loads(resp.read().decode("utf-8"))
+                return data.get("publicTunnelUrl")
+    except Exception:
+        return None
+    return None
+
+
+def find_node_binary() -> str | None:
+    """Cari binary Node.js baik dari PATH maupun lokasi instalasi user umum."""
+    candidates = [
+        os.environ.get("NODE_BIN"),
+        shutil.which("node"),
+        str(Path.home() / ".local" / "bin" / "node"),
+        "/usr/local/bin/node",
+        "/usr/bin/node",
+    ]
+    candidates.extend(sorted(glob.glob(str(Path.home() / ".nvm/versions/node/*/bin/node")), reverse=True))
+    candidates.extend(sorted(glob.glob(str(Path.home() / ".cache/node-v*/bin/node")), reverse=True))
+
+    for candidate in candidates:
+        if candidate and os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+            return candidate
+    return None
+
+
+def probe_cloud_drive_server(port: int, timeout: float = 0.6) -> bool:
+    """Periksa apakah port sudah menjalankan server Linux Cloud Drive."""
+    try:
+        req = urllib.request.Request(f"http://127.0.0.1:{port}/api/info", method="GET")
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            if resp.status == 200:
+                data = json.loads(resp.read().decode("utf-8"))
+                return data.get("app") == APP_ID or "storage" in data
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError):
+        return False
+    return False
+
+
+def is_port_in_use(port: int) -> bool:
+    """Periksa apakah port TCP lokal sedang dipakai proses lain."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.settimeout(0.3)
+        return sock.connect_ex(("127.0.0.1", port)) == 0
+
+
+def find_free_port(preferred_start: int = 8081) -> int:
+    """Cari port TCP kosong untuk mencegah bentrok saat port utama terpakai."""
+    for p in range(preferred_start, preferred_start + 30):
+        if not is_port_in_use(p):
+            return p
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
+
+
+class ServerController:
+    """Mengelola proses server Node.js & Cloudflared secara mandiri jika belum aktif."""
+
+    def __init__(self, preferred_port: int, local_only: bool, data_dir: str | None, keep_server: bool, enable_tunnel: bool = True):
+        self.preferred_port = preferred_port
+        self.local_only = local_only
+        self.data_dir = data_dir
+        self.keep_server = keep_server
+        self.enable_tunnel = enable_tunnel
+        self.port = preferred_port
+        self.process: subprocess.Popen | None = None
+        self.owned = False
+        self.tunnel_process: subprocess.Popen | None = None
+        self.tunnel_owned = False
+
+    def ensure_tunnel_running(self):
+        if not self.enable_tunnel or self.local_only:
+            return
+        cf_bin = find_cloudflared_binary()
+        if not cf_bin:
+            return
+        if is_cloudflared_running() and CLOUDFLARED_LOG.is_file():
+            self.tunnel_owned = False
+            return
+        if is_cloudflared_running() and not CLOUDFLARED_LOG.is_file():
+            # Proses cloudflared lama menulis ke log yang sudah terhapus; jalankan ulang agar URL terbaca
+            try:
+                subprocess.run(["pkill", "-x", "cloudflared"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+                time.sleep(0.3)
+            except Exception:
+                pass
+        try:
+            CLOUDFLARED_LOG.unlink(missing_ok=True)
+        except Exception:
+            pass
+        env = os.environ.copy()
+        env["GOGC"] = "50"
+        cmd = [
+            cf_bin,
+            "tunnel",
+            "--no-autoupdate",
+            "--ha-connections",
+            "1",
+            "--url",
+            f"http://127.0.0.1:{self.port}",
+            "--logfile",
+            str(CLOUDFLARED_LOG),
+        ]
+        self.tunnel_process = subprocess.Popen(
+            cmd,
+            cwd=str(APP_DIR),
+            env=env,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        self.tunnel_owned = True
+
+    def ensure_running(self) -> int:
+        if probe_cloud_drive_server(self.preferred_port):
+            self.port = self.preferred_port
+            self.owned = False
+            self.ensure_tunnel_running()
+            return self.port
+
+        if is_port_in_use(self.preferred_port):
+            self.port = find_free_port(self.preferred_port + 1)
+        else:
+            self.port = self.preferred_port
+
+        node_bin = find_node_binary()
+        if not node_bin:
+            raise RuntimeError(
+                "Node.js tidak ditemukan. Jalankan ./setup-linux-server.sh atau instal Node.js terlebih dahulu."
+            )
+
+        if not SERVER_JS.is_file():
+            raise RuntimeError(f"File server tidak ditemukan: {SERVER_JS}")
+
+        env = os.environ.copy()
+        env["PORT"] = str(self.port)
+        env["HOST"] = "127.0.0.1" if self.local_only else "0.0.0.0"
+        env["UV_THREADPOOL_SIZE"] = "2"
+        if self.data_dir:
+            env["CLOUD_DATA_DIR"] = os.path.abspath(self.data_dir)
+
+        cmd = [
+            node_bin,
+            "--max-old-space-size=48",
+            "--max-semi-space-size=1",
+            "--jitless",
+            "--expose-gc",
+            str(SERVER_JS),
+        ]
+
+        log_fp = open(SERVER_LOG, "a", encoding="utf-8")
+        self.process = subprocess.Popen(
+            cmd,
+            cwd=str(APP_DIR),
+            env=env,
+            stdout=log_fp,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+        )
+        self.owned = True
+
+        deadline = time.monotonic() + 8.0
+        while time.monotonic() < deadline:
+            if self.process.poll() is not None:
+                raise RuntimeError(f"Server gagal berjalan (kode keluar {self.process.returncode}). Cek {SERVER_LOG}.")
+            if probe_cloud_drive_server(self.port, timeout=0.4):
+                self.ensure_tunnel_running()
+                return self.port
+            time.sleep(0.1)
+
+        raise RuntimeError(f"Server timeout saat memulai pada port {self.port}.")
+
+    def stop_if_owned(self):
+        if self.tunnel_owned and not self.keep_server and self.tunnel_process and self.tunnel_process.poll() is None:
+            try:
+                os.killpg(os.getpgid(self.tunnel_process.pid), signal.SIGTERM)
+                self.tunnel_process.wait(timeout=2)
+            except Exception:
+                try:
+                    self.tunnel_process.kill()
+                except Exception:
+                    pass
+        if self.owned and not self.keep_server and self.process and self.process.poll() is None:
+            try:
+                os.killpg(os.getpgid(self.process.pid), signal.SIGTERM)
+                self.process.wait(timeout=3)
+            except Exception:
+                try:
+                    self.process.kill()
+                except Exception:
+                    pass
+
+
+def setup_tray_icon(window, url: str, port: int, quit_callback):
+    """Buat System Tray icon agar upload & cloudflared bisa berjalan di background saat jendela ditutup."""
+    from gi.repository import Gdk, Gio, Gtk
+
+    menu = Gtk.Menu()
+    item_open = Gtk.MenuItem(label="Buka Linux Cloud Drive")
+    item_open.connect("activate", lambda *_: (window.show_all(), window.present()))
+    menu.append(item_open)
+
+    item_browser = Gtk.MenuItem(label="Buka di Browser")
+    item_browser.connect("activate", lambda *_: Gio.AppInfo.launch_default_for_uri(url, None))
+    menu.append(item_browser)
+
+    item_copy_cf = Gtk.MenuItem(label="Salin Link Publik (Cloudflared)")
+
+    def on_copy_cf(*_):
+        cf_url = fetch_tunnel_url(port)
+        if cf_url:
+            cb = Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD)
+            cb.set_text(cf_url, -1)
+            msg = f"Link disalin: {cf_url}"
+        else:
+            msg = "Link Cloudflared belum siap / sedang offline."
+        try:
+            subprocess.Popen(["notify-send", APP_NAME, msg], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception:
+            pass
+
+    item_copy_cf.connect("activate", on_copy_cf)
+    menu.append(item_copy_cf)
+
+    menu.append(Gtk.SeparatorMenuItem())
+
+    item_quit = Gtk.MenuItem(label="Keluar Sepenuhnya")
+    item_quit.connect("activate", lambda *_: quit_callback())
+    menu.append(item_quit)
+    menu.show_all()
+
+    try:
+        import gi
+        gi.require_version("AyatanaAppIndicator3", "0.1")
+        from gi.repository import AyatanaAppIndicator3
+
+        icon_name = APP_ID if ICON_PATH.is_file() else "folder-remote"
+        indicator = AyatanaAppIndicator3.Indicator.new(
+            APP_ID,
+            icon_name,
+            AyatanaAppIndicator3.IndicatorCategory.APPLICATION_STATUS,
+        )
+        if ICON_PATH.is_file():
+            indicator.set_icon_theme_path(str(ICON_PATH.parent))
+            indicator.set_icon_full(ICON_PATH.stem, APP_NAME)
+        indicator.set_status(AyatanaAppIndicator3.IndicatorStatus.ACTIVE)
+        indicator.set_title(APP_NAME)
+        indicator.set_menu(menu)
+        return indicator
+    except Exception:
+        status_icon = Gtk.StatusIcon()
+        if ICON_PATH.is_file():
+            status_icon.set_from_file(str(ICON_PATH))
+        else:
+            status_icon.set_from_icon_name("folder-remote")
+        status_icon.set_tooltip_text(APP_NAME)
+        status_icon.connect("activate", lambda *_: (window.show_all(), window.present()))
+        status_icon.connect("popup-menu", lambda icon, btn, t: menu.popup(None, None, None, None, btn, t))
+        return status_icon
+
+
+def run_desktop_window(url: str, controller: ServerController, debug: bool = False):
+    """Buka jendela aplikasi desktop mandiri memakai GTK3 dan WebKit2."""
+    import gi
+
+    gi.require_version("Gtk", "3.0")
+    gi.require_version("Gdk", "3.0")
+    gi.require_version("WebKit2", "4.1")
+    from gi.repository import Gdk, Gio, GLib, Gtk, WebKit2
+
+    GLib.set_prgname(APP_ID)
+    GLib.set_application_name(APP_NAME)
+
+    data_base = Path.home() / ".local" / "share" / APP_ID
+    data_base.mkdir(parents=True, exist_ok=True)
+
+    data_manager = WebKit2.WebsiteDataManager(
+        base_data_directory=str(data_base / "data"),
+        base_cache_directory=str(data_base / "cache"),
+    )
+    web_context = WebKit2.WebContext.new_with_website_data_manager(data_manager)
+
+    window = Gtk.Window(title=APP_NAME)
+    window.set_default_size(1280, 820)
+    window.set_position(Gtk.WindowPosition.CENTER)
+
+    if ICON_PATH.is_file():
+        try:
+            window.set_icon_from_file(str(ICON_PATH))
+        except Exception:
+            pass
+
+    settings = WebKit2.Settings()
+    settings.set_enable_javascript(True)
+    settings.set_enable_html5_local_storage(True)
+    settings.set_enable_media(True)
+    settings.set_enable_mediasource(True)
+    settings.set_javascript_can_access_clipboard(True)
+    settings.set_enable_smooth_scrolling(True)
+    settings.set_enable_page_cache(True)
+    settings.set_enable_developer_extras(debug)
+
+    webview = WebKit2.WebView.new_with_context(web_context)
+    webview.set_settings(settings)
+
+    state = {"force_quit": False}
+
+    def full_quit():
+        state["force_quit"] = True
+        window.destroy()
+
+    _tray_ref = setup_tray_icon(window, url, controller.port, full_quit)
+
+    def show_message_dialog(msg_type, buttons, text, secondary=None):
+        dialog = Gtk.MessageDialog(
+            transient_for=window,
+            flags=Gtk.DialogFlags.MODAL,
+            message_type=msg_type,
+            buttons=buttons,
+            text=text,
+        )
+        if secondary:
+            dialog.format_secondary_text(secondary)
+        res = dialog.run()
+        dialog.destroy()
+        return res
+
+    def on_download_started(_ctx, download):
+        def on_decide_destination(dl, suggested_filename):
+            chooser = Gtk.FileChooserDialog(
+                title="Simpan File",
+                parent=window,
+                action=Gtk.FileChooserAction.SAVE,
+            )
+            chooser.add_buttons(
+                Gtk.STOCK_CANCEL,
+                Gtk.ResponseType.CANCEL,
+                Gtk.STOCK_SAVE,
+                Gtk.ResponseType.OK,
+            )
+            chooser.set_do_overwrite_confirmation(True)
+            downloads_dir = GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_DOWNLOAD) or str(Path.home())
+            chooser.set_current_folder(downloads_dir)
+            chooser.set_current_name(suggested_filename or "download")
+
+            response = chooser.run()
+            dest_uri = chooser.get_uri() if response == Gtk.ResponseType.OK else None
+            chooser.destroy()
+
+            if dest_uri:
+                dl.set_destination(dest_uri)
+                return True
+            dl.cancel()
+            return True
+
+        download.connect("decide-destination", on_decide_destination)
+
+    def on_script_dialog(_wv, dialog):
+        dtype = dialog.get_dialog_type()
+        msg = dialog.get_message()
+        if dtype == WebKit2.ScriptDialogType.ALERT:
+            show_message_dialog(Gtk.MessageType.INFO, Gtk.ButtonsType.OK, msg)
+        elif dtype == WebKit2.ScriptDialogType.CONFIRM:
+            res = show_message_dialog(Gtk.MessageType.QUESTION, Gtk.ButtonsType.OK_CANCEL, msg)
+            dialog.confirm_set_confirmed(res == Gtk.ResponseType.OK)
+        elif dtype == WebKit2.ScriptDialogType.PROMPT:
+            prompt_dlg = Gtk.MessageDialog(
+                transient_for=window,
+                flags=Gtk.DialogFlags.MODAL,
+                message_type=Gtk.MessageType.QUESTION,
+                buttons=Gtk.ButtonsType.OK_CANCEL,
+                text=msg,
+            )
+            entry = Gtk.Entry()
+            entry.set_text(dialog.prompt_get_default_text() or "")
+            entry.set_margin_start(16)
+            entry.set_margin_end(16)
+            prompt_dlg.get_content_area().add(entry)
+            entry.show()
+            res = prompt_dlg.run()
+            if res == Gtk.ResponseType.OK:
+                dialog.prompt_set_text(entry.get_text())
+            prompt_dlg.destroy()
+        return True
+
+    def on_create(_wv, navigation_action):
+        req = navigation_action.get_request()
+        target_uri = req.get_uri() if req else ""
+        if target_uri.startswith(("http://127.0.0.1:", "http://localhost:")):
+            popup = Gtk.Window(title=f"{APP_NAME} - Pratinjau")
+            popup.set_default_size(1060, 740)
+            popup.set_transient_for(window)
+            popup_wv = WebKit2.WebView.new_with_context(web_context)
+            popup_wv.set_settings(settings)
+            popup_wv.load_uri(target_uri)
+            popup.add(popup_wv)
+            popup.show_all()
+        elif target_uri:
+            try:
+                Gio.AppInfo.launch_default_for_uri(target_uri, None)
+            except Exception:
+                pass
+        return None
+
+    def on_delete_event(_win, _event):
+        if state["force_quit"]:
+            return False
+
+        def on_js_done(wv, res):
+            has_uploads = False
+            try:
+                js_res = wv.run_javascript_finish(res)
+                val = js_res.get_js_value()
+                has_uploads = bool(val.to_boolean()) if val else False
+            except Exception:
+                has_uploads = False
+
+            if has_uploads:
+                window.hide()
+                try:
+                    subprocess.Popen(
+                        ["notify-send", APP_NAME, "Upload tetap berjalan di background. Klik ikon Tray untuk membuka kembali."],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                    )
+                except Exception:
+                    pass
+            else:
+                full_quit()
+
+        webview.run_javascript("Boolean(window.__hasActiveUploads && window.__hasActiveUploads())", None, on_js_done)
+        return True
+
+    def on_key_press(_win, event):
+        ctrl = bool(event.state & Gdk.ModifierType.CONTROL_MASK)
+        if event.keyval == Gdk.KEY_F5 or (ctrl and event.keyval in (Gdk.KEY_r, Gdk.KEY_R)):
+            webview.reload()
+            return True
+        if event.keyval == Gdk.KEY_F11:
+            is_fs = bool(window.get_window().get_state() & Gdk.WindowState.FULLSCREEN)
+            window.unfullscreen() if is_fs else window.fullscreen()
+            return True
+        if ctrl and event.keyval in (Gdk.KEY_q, Gdk.KEY_Q):
+            full_quit()
+            return True
+        if ctrl and event.keyval in (Gdk.KEY_w, Gdk.KEY_W):
+            window.close()
+            return True
+        return False
+
+    web_context.connect("download-started", on_download_started)
+    webview.connect("script-dialog", on_script_dialog)
+    webview.connect("create", on_create)
+    window.connect("key-press-event", on_key_press)
+    window.connect("delete-event", on_delete_event)
+    window.connect("destroy", Gtk.main_quit)
+
+    webview.load_uri(url)
+    window.add(webview)
+    window.show_all()
+
+    def handle_sig(*_args):
+        GLib.idle_add(full_quit)
+
+    signal.signal(signal.SIGINT, handle_sig)
+    signal.signal(signal.SIGTERM, handle_sig)
+
+    try:
+        Gtk.main()
+    finally:
+        controller.stop_if_owned()
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Linux Cloud Drive - Standalone Desktop App")
+    parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8080")), help="Port server (default: 8080)")
+    parser.add_argument("--data-dir", type=str, default=None, help="Direktori penyimpanan kustom (default: folder proyek)")
+    parser.add_argument("--local-only", action="store_true", help="Bind server hanya ke 127.0.0.1 tanpa tunnel")
+    parser.add_argument("--no-tunnel", action="store_true", help="Jangan jalankan cloudflared secara otomatis")
+    parser.add_argument("--keep-server", action="store_true", help="Biarkan server tetap berjalan saat aplikasi ditutup")
+    parser.add_argument("--server-only", action="store_true", help="Jalankan server saja tanpa membuka jendela GUI")
+    parser.add_argument("--debug", action="store_true", help="Aktifkan WebKit Developer Inspector")
+    args = parser.parse_args()
+
+    controller = ServerController(
+        preferred_port=args.port,
+        local_only=args.local_only,
+        data_dir=args.data_dir,
+        keep_server=args.keep_server or args.server_only,
+        enable_tunnel=not args.no_tunnel,
+    )
+
+    try:
+        active_port = controller.ensure_running()
+    except Exception as exc:
+        print(f"[ERROR] {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    url = f"http://127.0.0.1:{active_port}"
+    print(f"[OK] {APP_NAME} aktif pada {url}")
+
+    if args.server_only:
+        running = {"flag": True}
+
+        def stop_server_only(*_args):
+            running["flag"] = False
+
+        signal.signal(signal.SIGINT, stop_server_only)
+        signal.signal(signal.SIGTERM, stop_server_only)
+        try:
+            while running["flag"] and controller.process and controller.process.poll() is None:
+                time.sleep(0.5)
+        finally:
+            if not args.keep_server:
+                controller.keep_server = False
+                controller.stop_if_owned()
+        return
+
+    run_desktop_window(url, controller, debug=args.debug)
+
+
+if __name__ == "__main__":
+    main()

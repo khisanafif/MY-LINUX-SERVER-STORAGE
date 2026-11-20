@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#F1F5F9"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#0F172A" flood-opacity="0.16"/>
+    </filter>
+  </defs>
+  <rect x="8" y="8" width="112" height="112" rx="28" fill="url(#bg)" stroke="#E2E8F0" stroke-width="2" filter="url(#shadow)"/>
+  <!-- Drive-inspired Cloud Triangle -->
+  <path d="M51 30 L77 30 L102 74 L89 96 L64 52 Z" fill="#FBBC04"/>
+  <path d="M51 30 L64 52 L39 96 L26 74 Z" fill="#0F9D58"/>
+  <path d="M39 96 L51.5 74 L102 74 L89 96 Z" fill="#4285F4"/>
+  <path d="M51 30 L77 30 L64 52 Z" fill="#EA4335" opacity="0.92"/>
+  <path d="M39 96 L51.5 74 L64 52 L51 30 L26 74 Z" fill="#34A853" opacity="0.25"/>
+</svg>
